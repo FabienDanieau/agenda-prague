@@ -27,7 +27,7 @@ import json
 import re
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -327,6 +327,41 @@ def from_crossclub(client: httpx.Client, today: date) -> list[dict]:
             info=clip(info),
             image=img_of(node, ".photo153 img", CROSSCLUB),
             source="crossclub"))
+    return out
+
+
+# --------------------------------------------------------------------------- praha 2 (dvojka)
+
+
+DVOJKA = "https://dvojka.praha2.cz/events"
+
+
+def from_dvojka(client: httpx.Client, today: date) -> list[dict]:
+    """Prague 2 district calendar (Drupal). Each teaser carries smartdate <time> attributes,
+    its own category and the actual place, so nothing has to be guessed."""
+    soup = soup_of(client, DVOJKA)
+    out = []
+    for card in soup.select(".node-teaser-akce"):
+        title = text_of(card, ".teaser-title")
+        stamps = [t.get("datetime") for t in card.select("time[datetime]") if t.get("datetime")]
+        if not (title and stamps):
+            continue
+        try:
+            start = datetime.fromisoformat(stamps[0])
+            finish = datetime.fromisoformat(stamps[-1])
+        except ValueError:
+            continue
+        if not dates.plausible(finish.date(), today):
+            continue
+        kind = text_of(card, ".teaser-kategorie")
+        out.append(event(
+            title, max(start.date(), today), text_of(card, ".misto-akce") or "Praha 2",
+            category=categorize(kind or title, "culture"),
+            end=finish.date() if finish.date() != start.date() else None,
+            tag=kind or None, start_time=start.time(),
+            info=clip(text_of(card, ".teaser-price")),
+            url=urljoin(DVOJKA, card.get("href") or ""),
+            image=bg_image_of(card, ".teaser-img", DVOJKA), source="dvojka"))
     return out
 
 
@@ -816,7 +851,7 @@ def main() -> None:
     with httpx.Client(timeout=40, follow_redirects=True) as client:
         # A venue's own page beats an aggregator's copy of it (room, price, line-up), and dedup
         # keeps whichever source is seen first -- so venue-native sources run before praguerocks.
-        for name, fn in (("crossclub", from_crossclub), ("rockcafe", from_rockcafe), ("kasarnakarlin", from_kasarnakarlin), ("eternia", from_eternia),
+        for name, fn in (("crossclub", from_crossclub), ("rockcafe", from_rockcafe), ("kasarnakarlin", from_kasarnakarlin), ("dvojka", from_dvojka), ("eternia", from_eternia),
                          ("ifp", from_ifp), ("pragueaccueil", from_pragueaccueil),
                          ("mountainsonstage", from_mountainsonstage),
                          ("nocvedy", from_nocvedy), ("praguecc", from_praguecc),
