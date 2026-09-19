@@ -1,0 +1,64 @@
+{
+  "_comment": "What probe.py / apihunt.py actually proved, per source. Verified 2026-09-19. 'kind' decides the work: json/firestore need no LLM and no date parsing; html needs an extraction schema plus Czech date support.",
+
+  "aggregators": [
+    {
+      "name": "praguerocks",
+      "kind": "firestore",
+      "url": "https://firestore.googleapis.com/v1/projects/praguerocks-a1134/databases/(default)/documents/events?pageSize=300",
+      "places_url": "https://firestore.googleapis.com/v1/projects/praguerocks-a1134/databases/(default)/documents/places?pageSize=300",
+      "auth": "none — open read rules, no API key needed",
+      "paging": "nextPageToken",
+      "fields": { "date": "YYYYMMDD string", "title": "string", "link": "path, prefix with https://praguerocks.cz", "place_slug": "joins to places collection" },
+      "upcoming": 259,
+      "covers": ["lucernamusicbar", "rockcafe", "futurum", "007", "roxy", "akropolis", "meetfactory", "cross", "chapeau"],
+      "note": "Thin: no start time, no description. Unblocks Palac Akropolis (site returns HTTP 204) and Lucerna (dates only in markup). YYYYMMDD is already handled by marseille's _COMPACT regex — zero date work."
+    },
+    {
+      "name": "prague.eu",
+      "kind": "html",
+      "url": "https://prague.eu/en/akce-kategorie/events/?pg=1",
+      "paging": "?pg=N",
+      "upcoming": "628 date strings in visible text, 2.3 MB/page",
+      "note": "Official city agenda, city-wide (culture/exhibitions), complements praguerocks' rock focus. Needs an extraction schema + the Czech date regex."
+    },
+    {
+      "name": "pragueexperience",
+      "kind": "html",
+      "url": "https://www.pragueexperience.com/events/events.asp",
+      "paging": "?EventYear=2026&EventMonth=09 — one clean request per month",
+      "upcoming": "61 English date strings on the current month",
+      "note": "English listing: '16 September 2026' parses with marseille's dates.py UNCHANGED (_MONTHS already holds English names, _SINGLE already matches D Month YYYY). Cheapest source to add — no Czech work, and the extractor prompts need no translation either."
+    }
+  ],
+
+  "venues": [
+    { "name": "Eternia Smichov", "kind": "json", "url": "https://api.eterniasmichov.com/events", "auth": "none",
+      "fields": { "datum": "D. M. YYYY", "nazev": "title", "misto": "room (subzero / Puda)", "info": "description", "link": "often a Facebook event", "zobrazeno": "visible flag", "multipleDays": "bool" },
+      "upcoming": 137, "total": 475,
+      "images": "none — the API has no image field and the site renders no event pictures. All 466 links are Facebook event URLs, and Facebook returns 400 to anonymous clients. Flyers exist only at instagram.com/eternia.smichov and facebook.com/eterniasmichov, so images need Apify + a vision model (marseille's social pipeline).",
+      "note": "Next.js static export, empty pageProps, data fetched client-side. Found by apihunt.py via an absolute URL to api.<venue>.com. Returns full history since 2019 — filter on datum, as the site's own JS does." },
+
+    { "name": "MeetFactory", "kind": "html", "url": "https://www.meetfactory.cz/cs/program", "note": "schema.org JSON-LD, 10 dated events" },
+    { "name": "Kino Aero", "kind": "html", "url": "https://www.kinoaero.cz/program", "note": "schema.org JSON-LD, 25 dated events" },
+    { "name": "Ceska filharmonie", "kind": "html", "url": "https://www.ceskafilharmonie.cz/program/", "note": "schema.org JSON-LD, 20 dated events + datetime attrs" },
+    { "name": "GoOut Praha", "kind": "html", "url": "https://goout.net/cs/praha/akce/", "note": "schema.org JSON-LD, 9 on page 1 — aggregator, check its own API before scraping" },
+
+    { "name": "Rock Cafe", "kind": "html", "url": "https://rockcafe.cz/program/", "note": "server-rendered, 95 dates in text. /en/program/ is the same content. Also in praguerocks (51 events)." },
+    { "name": "DOX", "kind": "html", "url": "https://www.dox.cz/program", "note": "50 dates in text. Serves 164 bytes to a Chrome UA and 141 kB to an honest one — do not spoof." },
+    { "name": "Jazz Dock", "kind": "html", "url": "https://www.jazzdock.cz/cs/program", "note": "45 dates in text" },
+    { "name": "Cross Club", "kind": "html", "url": "https://www.crossclub.cz/cs/program", "note": "21 dates in text; also in praguerocks" },
+    { "name": "Forum Karlin", "kind": "html", "url": "https://www.forumkarlin.cz/program", "note": "31 dates in text; in praguerocks places but 0 upcoming there" },
+    { "name": "Narodni divadlo", "kind": "html", "url": "https://www.narodni-divadlo.cz/cs/program", "note": "210 dates in text, 2.1 MB page" },
+
+    { "name": "Palac Akropolis", "kind": "blocked", "url": "https://www.palacakropolis.cz/program", "note": "HTTP 204 No Content to everything including plain curl — a browser gets the same 204. Wrong URL, not a rendering problem. Use praguerocks (18 upcoming) until the real agenda URL is found." },
+    { "name": "Divadlo Archa", "kind": "unresolved", "url": "https://www.archatheatre.cz/cs/program", "note": "29 kB server-rendered, zero dates anywhere in the raw HTML. Only remaining candidate that might genuinely need rendering." }
+  ],
+
+  "_date_formats_seen": {
+    "D. M. YYYY": "Eternia datum, and the dominant Czech web format — needs a new regex in dates.py",
+    "YYYYMMDD": "praguerocks — already handled by marseille's _COMPACT",
+    "ISO 8601": "JSON-LD startDate — already handled",
+    "czech month names": "rare: 20 hits across 12 venues, all on one site"
+  }
+}

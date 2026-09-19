@@ -1,0 +1,9 @@
+# Secrets and generated artefacts — never commit.
+.env
+.image_cache.json
+.apify_cache.json
+img/
+events.json
+_site/
+__pycache__/
+*.pyc
