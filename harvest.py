@@ -90,12 +90,28 @@ def uid(venue: str, title: str, day: str) -> str:
     return hashlib.sha1(f"{venue}|{title}|{day}".encode()).hexdigest()[:12]
 
 
+# The same venue is spelled differently by different sources; without this the dedup key
+# treats them as two places and the event shows twice. Keyed on dates.slug().
+VENUE_ALIAS = {
+    "meetfactory": "Meet Factory",
+    "futurum music bar": "Futurum",
+    "palac akropolis": "Palác Akropolis",
+    "o2 universum": "O2 universum",
+    "klub 007 strahov": "007 Strahov",
+}
+
+
+def canonical_venue(name: str) -> str:
+    return VENUE_ALIAS.get(dates.slug(name), name)
+
+
 def event(title, day, venue, *, category, end=None, room=None, url=None, info=None,
           tag=None, start_time=None, image=None, source="") -> dict:
     # a run that began before today has its start clamped to today, which can leave an end
     # on or before it -- that is a single-day event now, not a range
     if end and end <= day:
         end = None
+    venue = canonical_venue(venue)
     return {
         "uid": uid(venue, title, day.isoformat()), "title": title,
         "date": day.isoformat(), "end": end.isoformat() if end else None,
@@ -327,6 +343,41 @@ def from_crossclub(client: httpx.Client, today: date) -> list[dict]:
             info=clip(info),
             image=img_of(node, ".photo153 img", CROSSCLUB),
             source="crossclub"))
+    return out
+
+
+# --------------------------------------------------------------------------- rfp concerts
+
+
+RFP = "https://rfpconcerts.cz/en/concerts/"
+
+
+def from_rfpconcerts(client: httpx.Client, today: date) -> list[dict]:
+    """A promoter, not a venue: each card names the venue and city, and the tour leaves Prague
+    (2 of 66 cards are Brno and Hradec Králové), so the city has to be filtered."""
+    soup = soup_of(client, RFP)
+    out = []
+    for card in soup.select(".card--lineup"):
+        title = text_of(card, ".card__header h3")
+        rows = [d.get_text(" ", strip=True) for d in card.select(".card__footer div")]
+        if not (title and len(rows) >= 2):
+            continue
+        where = rows[-1]
+        if not PRAGUE.search(where):
+            continue
+        try:
+            p = dates.parse(rows[0], today)
+        except dates.DateError:
+            continue
+        if not dates.plausible(p.start, today):
+            continue
+        # "Café V lese, Praha" -> the venue is everything before the city
+        venue = where.rsplit(",", 1)[0].strip() or "Praha"
+        out.append(event(
+            title, p.start, venue, category="music", start_time=p.start_time,
+            tag="RFP", info=clip(text_of(card, ".card__header p")),
+            url=card.get("href") or RFP,
+            image=img_of(card, ".card__img img", RFP), source="rfpconcerts"))
     return out
 
 
@@ -896,7 +947,7 @@ def main() -> None:
                ("nocvedy", from_nocvedy), ("praguecc", from_praguecc),
                ("o2arena", from_o2arena), ("dox", from_dox),
                ("praha.eu", from_praha_eu), ("expats", from_expats),
-               ("praguerocks", from_praguerocks)]
+               ("rfpconcerts", from_rfpconcerts), ("praguerocks", from_praguerocks)]
     # Facebook costs Apify credit per event, so it rides along with --social
     if args.social:
         sources.insert(0, ("facebook", from_facebook))

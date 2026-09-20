@@ -11,6 +11,10 @@
   50.06914,
   14.42508
  ],
+ "Archa+": [
+  50.08951,
+  14.43418
+ ],
  "Bastion": [
   50.06786,
   14.42691
@@ -20,6 +24,10 @@
   14.43698
  ],
  "Bazilika sv. Petra a Pavla na Vyšehradě": null,
+ "Bike Jesus": [
+  50.09522,
+  14.43635
+ ],
  "CAMP - Centrum Architektury a Městského Plánování": [
   50.07291,
   14.418
@@ -28,6 +36,11 @@
   50.0833,
   14.4292
  ],
+ "Café V lese": [
+  50.07139,
+  14.44838
+ ],
+ "Cargo Gallery": null,
  "Central Library": [
   50.0671,
   14.4241
@@ -56,6 +69,7 @@
   50.101,
   14.4453
  ],
+ "Distrikt": null,
  "Divadlo D21": [
   50.07215,
   14.43719
@@ -128,6 +142,11 @@
   50.1314,
   14.3721
  ],
+ "Forum Karlín": [
+  50.09185,
+  14.45488
+ ],
+ "Fuchs2": null,
  "Futurum": [
   50.0687,
   14.4046
@@ -193,10 +212,12 @@
   50.07775,
   14.4193
  ],
+ "Klub Varšava": null,
  "Knihovna Antonína Švehly": [
   50.07609,
   14.43881
  ],
+ "Křižíkův Pavilon B": null,
  "Lucerna Music Bar": [
   50.0817,
   14.4249
@@ -229,6 +250,7 @@
   50.07816,
   14.42127
  ],
+ "Nová Spirála": null,
  "Náplavka": [
   50.07161,
   14.41429
@@ -237,6 +259,10 @@
  "O2 arena": [
   50.1039,
   14.493
+ ],
+ "O2 universum": [
+  50.10384,
+  14.49336
  ],
  "Palác Akropolis": [
   50.0876,
@@ -266,6 +292,11 @@
   50.0897,
   14.4243
  ],
+ "SaSaZu": [
+  50.09923,
+  14.44509
+ ],
+ "Subzero": null,
  "The Academy of Sciences campus in Spořilov": [
   50.0408,
   14.4769
@@ -289,6 +320,10 @@
  "Vratislavova 57/1, 128 00 Praha 2-Vyšehrad, Česko": [
   50.06722,
   14.41737
+ ],
+ "Výstaviště Holešovice": [
+  50.10914,
+  14.42642
  ],
  "ZŠ, MŠ a ZUŠ Vinařice, okres Kladno": [
   50.1766,
