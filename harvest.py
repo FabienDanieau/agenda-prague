@@ -59,7 +59,7 @@ SCIENCE = re.compile(r"scien|vedec|\bveda\b|technic|technolog|research|vyzkum|me
                      r"biolog|chemi|fyzik|physic|matemat", re.I)
 SPORT = re.compile(r"\bhc \b|hockey|hokej|\bsparta\b|davis cup|tennis|tenis|basket|volejbal|"
                    r"football|fotbal|\bmatch\b|zapas|playoff|championship|champions|gladiator|"
-                   r"\bfmx\b|\bufc\b|\bmma\b|olympi|maraton|marathon", re.I)
+                   r"\bfmx\b|\bufc\b|\bmma\b|olympi|maraton|marathon|boulder|lezen|lezeck|climb|horolez", re.I)
 
 
 def categorize(raw: str | None, default: str) -> str:
@@ -101,6 +101,10 @@ VENUE_ALIAS = {
     # Subzero is a room inside Eternia Smíchov, which the venue's own feed reports as a room
     "subzero": "Eternia Smíchov",
     "sasazu": "SaSaZu",
+    # Facebook labels this gym's events sometimes by name, sometimes by street address
+    "krizova 6 150 00 prague czech republic": "Lezecké centrum SmíchOFF",
+    "lezecke centrum smichoff": "Lezecké centrum SmíchOFF",
+    "smichoff": "Lezecké centrum SmíchOFF",
 }
 
 
@@ -410,6 +414,43 @@ def from_crossclub(client: httpx.Client, today: date) -> list[dict]:
     return out
 
 
+# --------------------------------------------------------------------------- czech AI
+
+
+CNAIP = "https://www.cnaip.cz/en/events"
+
+
+def from_cnaip(client: httpx.Client, today: date) -> list[dict]:
+    """Czech AI's events list: a date column, then the title and the venue line.
+
+    Nationwide, so the city is filtered -- their listing mixes Prague with Ostrava.
+    """
+    soup = soup_of(client, CNAIP)
+    out = []
+    for row in soup.select("li"):
+        link = row.select_one("h3 a")
+        if not link:
+            continue
+        title = link.get_text(" ", strip=True)
+        cells = [p.get_text(" ", strip=True) for p in row.select("p")]
+        if not (title and cells):
+            continue
+        where = next((c for c in cells[1:] if PRAGUE.search(c)), None)
+        if not where:
+            continue
+        try:
+            p = dates.parse(cells[0], today)
+        except dates.DateError:
+            continue
+        if not dates.plausible(p.end or p.start, today):
+            continue
+        out.append(event(
+            title, max(p.start, today), where.split(",")[0].strip() or "Praha",
+            category="science", end=p.end, tag="AI",
+            url=link.get("href") or CNAIP, source="cnaip"))
+    return out
+
+
 # --------------------------------------------------------------------------- sasazu
 
 
@@ -479,16 +520,22 @@ def from_rfpconcerts(client: httpx.Client, today: date) -> list[dict]:
 # --------------------------------------------------------------------------- facebook events
 
 
-# Groups that organise events but keep no website. Facebook blocks anonymous clients, so this
-# goes through Apify -- and its events tab is structured, so no model has to read a flyer.
-FB_PAGES = [("somelikeitczech", "Some Like It Czech")]
+# Groups and venues that organise events but publish no dated listing of their own. Facebook
+# blocks anonymous clients, so this goes through Apify -- and its events tab is structured,
+# so no model has to read a flyer. Each entry: (page, organiser, default category).
+FB_PAGES = [
+    ("somelikeitczech", "Some Like It Czech", "music"),
+    # lezeckecentrum.cz publishes only news posts carrying their publication date; the gym's
+    # actual programme lives on its Facebook page.
+    ("smichOFF", "SmíchOFF", "sport"),
+]
 
 
 def from_facebook(client: httpx.Client, today: date) -> list[dict]:
     import social
 
     out = []
-    for page, organiser in FB_PAGES:
+    for page, organiser, default_cat in FB_PAGES:
         for it in social.facebook_events(page):
             if it.get("isCanceled"):
                 continue
@@ -498,7 +545,8 @@ def from_facebook(client: httpx.Client, today: date) -> list[dict]:
                 continue
             loc = it.get("location") or {}
             out.append(event(
-                title, start.date(), loc.get("name") or organiser, category="music",
+                title, start.date(), loc.get("name") or organiser,
+                category=categorize(title, default_cat),
                 start_time=start.time() if start.time() != time(0, 0) else None,
                 tag=organiser, info=clip(it.get("description")),
                 url=it.get("url"), image=it.get("imageUrl") or None,
@@ -1042,7 +1090,7 @@ def main() -> None:
                ("nocvedy", from_nocvedy), ("praguecc", from_praguecc),
                ("o2arena", from_o2arena), ("dox", from_dox),
                ("praha.eu", from_praha_eu), ("expats", from_expats),
-               ("sasazu", from_sasazu), ("rfpconcerts", from_rfpconcerts), ("praguerocks", from_praguerocks)]
+               ("cnaip", from_cnaip), ("sasazu", from_sasazu), ("rfpconcerts", from_rfpconcerts), ("praguerocks", from_praguerocks)]
     # Facebook costs Apify credit per event, so it rides along with --social
     if args.social:
         sources.insert(0, ("facebook", from_facebook))
