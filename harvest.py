@@ -108,6 +108,67 @@ def canonical_venue(name: str) -> str:
     return VENUE_ALIAS.get(dates.slug(name), name)
 
 
+# Words that say nothing about *which* event this is, so they cannot prove two titles match.
+# "night", "party" and "festival" are deliberately NOT here: they are the only thing telling
+# "Techno Night" apart from "Techno Party" at the same club on the same evening.
+TITLE_NOISE = {"presents", "uvadi", "praha", "prague", "tour", "live", "koncert", "concert",
+               "show", "klub", "club", "hosted", "with", "hostem"}
+
+
+def title_words(title: str) -> set[str]:
+    return {w for w in dates.slug(title).split() if len(w) >= 4} - TITLE_NOISE
+
+
+def same_event(a: set[str], b: set[str]) -> bool:
+    """Do two titles at the same venue on the same day describe one event?
+
+    A promoter writes "Rock for People presents: Vundabar (USA), Yot Club (USA)" where the
+    venue writes "Vundabar + Yot Club", so an exact key misses. Three things count as a match:
+    the same distinctive words, a strong majority of the shorter title shared, or the shorter
+    title wholly inside a richer one.
+
+    Merely sharing two words does not. At Noc vedcu that merged "COMMUNICATION OF SCIENCE -
+    LIGHT SHOW" with "SPECTROSCOPE - Science Trail of the Institute" on {science, institute},
+    which are boilerplate at a science institute.
+    """
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    shared = a & b
+    small, large = (a, b) if len(a) < len(b) else (b, a)
+    if len(shared) >= 2 and len(shared) / len(small) >= 0.6:
+        return True
+    return bool(shared) and small < large
+
+
+def dedupe(events: list[dict]) -> list[dict]:
+    """One entry per real event, keeping the first source to report it and filling any gaps
+    from the others -- the venue knows the start time, the promoter knows the support act.
+
+    Fuzzy titles are only compared ACROSS sources. A single source listing two things at one
+    venue on one night means two things: Noc vedcu really does run "CTU ROBOTICS STUDENT TEAM"
+    and "THE AEROLAB STUDENT TEAM" in the same building, and topic words like {student, team}
+    or {secret, plants} are not evidence they are the same talk. Identical titles within a
+    source are already collapsed by the exact key.
+    """
+    kept: list[dict] = []
+    by_slot: dict[tuple[str, str], list[tuple[set[str], dict]]] = {}
+    for e in events:
+        slot = (dates.slug(e["venue"]), e["date"])
+        words = title_words(e["title"])
+        for other_words, other in by_slot.get(slot, []):
+            if other["source"] != e["source"] and same_event(words, other_words):
+                for field in ("time", "image", "info", "url", "tag", "room", "end"):
+                    if not other.get(field) and e.get(field):
+                        other[field] = e[field]
+                break
+        else:
+            by_slot.setdefault(slot, []).append((words, e))
+            kept.append(e)
+    return kept
+
+
 def event(title, day, venue, *, category, end=None, room=None, url=None, info=None,
           tag=None, start_time=None, image=None, source="") -> dict:
     # a run that began before today has its start clamped to today, which can leave an end
@@ -1001,7 +1062,10 @@ def main() -> None:
     seen: dict[tuple[str, str, str], dict] = {}
     for e in events:
         seen.setdefault((dates.slug(e["venue"]), e["date"], dates.slug(e["title"])), e)
-    events = sorted(seen.values(), key=lambda e: (e["date"], e["venue"], e["title"]))
+    # dedupe in source order, so the venue's own record wins over an aggregator's copy,
+    # then sort for output
+    events = sorted(dedupe(list(seen.values())),
+                    key=lambda e: (e["date"], e["venue"], e["title"]))
 
     drop_shared_images(events)
     if args.posters:
