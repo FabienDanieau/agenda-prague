@@ -19,6 +19,7 @@ import os
 import re
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -94,8 +95,87 @@ def fetch_posts(handle: str, limit: int = 60) -> list[dict]:
     return keep
 
 
+FB_ACTOR = "apify~facebook-events-scraper"
+VENUES = HERE / "venues.json"
+PRAGUE_TZ = ZoneInfo("Europe/Prague")
+
+
+def facebook_events(page: str, limit: int = 40) -> list[dict]:
+    """A page's upcoming hosted events, straight from Facebook's own event objects.
+
+    Unlike reading flyers off a feed, this needs no vision model: the events tab returns
+    name, start time, venue and even the venue's coordinates as structured fields.
+    Cached like the Instagram pull, since Apify bills per result.
+    """
+    key = f"fb:{page}"
+    try:
+        cache = json.loads(CACHE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cache = {}
+
+    entry = cache.get(key)
+    if entry and datetime.now(timezone.utc) - datetime.fromisoformat(entry["fetched"]) < CACHE_TTL:
+        print(f"  facebook/{page}: {len(entry['posts'])} events (cached)")
+        return entry["posts"]
+
+    tok = token()
+    if not tok:
+        print("  ! APIFY_API_KEY not set, skipping Facebook")
+        return entry["posts"] if entry else []
+
+    try:
+        r = httpx.post(
+            f"https://api.apify.com/v2/acts/{FB_ACTOR}/run-sync-get-dataset-items",
+            params={"token": tok},
+            json={"startUrls": [f"https://www.facebook.com/{page}/upcoming_hosted_events"],
+                  "maxEvents": limit},
+            timeout=420,
+        )
+        r.raise_for_status()
+        # the actor emits an {"error": "no_results"} record rather than an empty list
+        items = [it for it in r.json() if not it.get("error")]
+    except (httpx.HTTPError, ValueError) as exc:
+        print(f"  ! apify facebook/{page} failed: {type(exc).__name__}: {exc}")
+        return entry["posts"] if entry else []
+
+    keep = [{k: it.get(k) for k in
+             ("name", "utcStartDate", "url", "imageUrl", "location", "description",
+              "isCanceled", "isOnline")} for it in items if it.get("utcStartDate")]
+    cache[key] = {"fetched": datetime.now(timezone.utc).isoformat(), "posts": keep}
+    CACHE.write_text(json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"  facebook/{page}: {len(keep)} events (fetched)")
+
+    # Facebook ships the venue's coordinates, so record them rather than geocoding the name
+    learned = {}
+    for it in keep:
+        loc = it.get("location") or {}
+        if loc.get("name") and loc.get("latitude") and loc.get("longitude"):
+            learned[loc["name"]] = [round(float(loc["latitude"]), 5),
+                                    round(float(loc["longitude"]), 5)]
+    if learned:
+        try:
+            venues = json.loads(VENUES.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            venues = {}
+        # never overwrite a location we already trust
+        added = {k: v for k, v in learned.items() if not venues.get(k)}
+        if added:
+            venues |= added
+            VENUES.write_text(json.dumps(dict(sorted(venues.items())), ensure_ascii=False,
+                                         indent=1), encoding="utf-8")
+            print(f"  facebook/{page}: learned {len(added)} venue locations")
+    return keep
+
+
+def local_start(utc_iso: str) -> datetime | None:
+    """Facebook timestamps are UTC; the agenda is Prague wall-clock."""
+    try:
+        return datetime.fromisoformat(utc_iso.replace("Z", "+00:00")).astimezone(PRAGUE_TZ)
+    except (ValueError, AttributeError):
+        return None
+
+
 def caption_dates(caption: str, today: date) -> set[str]:
-    """Every date the caption mentions, as ISO strings."""
     found: set[str] = set()
     for line in (caption or "").splitlines():
         try:

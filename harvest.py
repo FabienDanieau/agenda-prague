@@ -330,6 +330,36 @@ def from_crossclub(client: httpx.Client, today: date) -> list[dict]:
     return out
 
 
+# --------------------------------------------------------------------------- facebook events
+
+
+# Groups that organise events but keep no website. Facebook blocks anonymous clients, so this
+# goes through Apify -- and its events tab is structured, so no model has to read a flyer.
+FB_PAGES = [("somelikeitczech", "Some Like It Czech")]
+
+
+def from_facebook(client: httpx.Client, today: date) -> list[dict]:
+    import social
+
+    out = []
+    for page, organiser in FB_PAGES:
+        for it in social.facebook_events(page):
+            if it.get("isCanceled"):
+                continue
+            start = social.local_start(it.get("utcStartDate") or "")
+            title = (it.get("name") or "").strip()
+            if not (start and title) or not dates.plausible(start.date(), today):
+                continue
+            loc = it.get("location") or {}
+            out.append(event(
+                title, start.date(), loc.get("name") or organiser, category="music",
+                start_time=start.time() if start.time() != time(0, 0) else None,
+                tag=organiser, info=clip(it.get("description")),
+                url=it.get("url"), image=it.get("imageUrl") or None,
+                source="facebook"))
+    return out
+
+
 # --------------------------------------------------------------------------- praha 2 (dvojka)
 
 
@@ -858,16 +888,23 @@ def main() -> None:
 
     today = date.today()
     events: list[dict] = []
+    sources = [("crossclub", from_crossclub), ("rockcafe", from_rockcafe),
+               ("kasarnakarlin", from_kasarnakarlin), ("dvojka", from_dvojka),
+               ("eternia", from_eternia), ("ifp", from_ifp),
+               ("pragueaccueil", from_pragueaccueil),
+               ("mountainsonstage", from_mountainsonstage),
+               ("nocvedy", from_nocvedy), ("praguecc", from_praguecc),
+               ("o2arena", from_o2arena), ("dox", from_dox),
+               ("praha.eu", from_praha_eu), ("expats", from_expats),
+               ("praguerocks", from_praguerocks)]
+    # Facebook costs Apify credit per event, so it rides along with --social
+    if args.social:
+        sources.insert(0, ("facebook", from_facebook))
+
     with httpx.Client(timeout=40, follow_redirects=True) as client:
         # A venue's own page beats an aggregator's copy of it (room, price, line-up), and dedup
         # keeps whichever source is seen first -- so venue-native sources run before praguerocks.
-        for name, fn in (("crossclub", from_crossclub), ("rockcafe", from_rockcafe), ("kasarnakarlin", from_kasarnakarlin), ("dvojka", from_dvojka), ("eternia", from_eternia),
-                         ("ifp", from_ifp), ("pragueaccueil", from_pragueaccueil),
-                         ("mountainsonstage", from_mountainsonstage),
-                         ("nocvedy", from_nocvedy), ("praguecc", from_praguecc),
-                         ("o2arena", from_o2arena), ("dox", from_dox),
-                         ("praha.eu", from_praha_eu), ("expats", from_expats),
-                         ("praguerocks", from_praguerocks)):
+        for name, fn in sources:
             try:
                 got = fn(client, today)
             except (httpx.HTTPError, ValueError) as exc:
