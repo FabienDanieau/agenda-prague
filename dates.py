@@ -60,7 +60,10 @@ ENGLISH = re.compile(
 # "8 December", "16 September 2026"  -- day before month
 ENGLISH_DM = re.compile(
     rf"(?:\b{_EN_WD_RE},?\s+)?\b(\d{{1,2}})(?:st|nd|rd|th)?\s+{_EN_MONTH_RE}(?:,?\s+(\d{{4}}))?")
-TIME = re.compile(r"\b(\d{1,2})\s*[h:.]\s*(\d{2})?\s*(am|pm)?|\b(\d{1,2})\s*(am|pm)\b", re.I)
+# Times: "10h00", "20:30", "7pm", "7:30pm". A dot is deliberately NOT a separator here --
+# "6. 9." is a Czech date, and accepting it as a time turned every dotted range into a
+# 06:00 start.
+TIME = re.compile(r"\b(\d{1,2})\s*[h:]\s*(\d{2})?\s*(am|pm)?|\b(\d{1,2})\s*(am|pm)\b", re.I)
 
 # A listing that claims a date this far out is a parse error, not an event.
 MAX_HORIZON_DAYS = 18 * 30
@@ -226,6 +229,14 @@ def _selfcheck() -> None:
 
     p = parse("16 September 2026", t)
     assert p.start == date(2026, 9, 16), p
+
+    # a dotted date must never be read as a clock time ("6. 8. – 24. 9." is not 06:00)
+    p = parse("6. 8. – 24. 9.", t)
+    assert (p.start_time, p.end_time) == (None, None), p
+    assert parse("14. 9. – 18. 1. 2027", t).start_time is None
+    # ...while a real time alongside a dotted date still reads
+    p = parse("20. 9. 2026 18:30", t)
+    assert (p.start, p.start_time) == (date(2026, 9, 20), time(18, 30)), p
 
     assert parse("26. 9. 2026", t).end is None
     assert not plausible(date(20, 10, 10), t)      # the real Eternia typo

@@ -27,7 +27,7 @@ import json
 import re
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -354,11 +354,13 @@ def from_dvojka(client: httpx.Client, today: date) -> list[dict]:
         if not dates.plausible(finish.date(), today):
             continue
         kind = text_of(card, ".teaser-kategorie")
+        # T00:00 is the all-day convention in machine dates, not a midnight start
+        begins = start.time() if start.time() != time(0, 0) else None
         out.append(event(
             title, max(start.date(), today), text_of(card, ".misto-akce") or "Praha 2",
             category=categorize(kind or title, "culture"),
             end=finish.date() if finish.date() != start.date() else None,
-            tag=kind or None, start_time=start.time(),
+            tag=kind or None, start_time=begins,
             info=clip(text_of(card, ".teaser-price")),
             url=urljoin(DVOJKA, card.get("href") or ""),
             image=bg_image_of(card, ".teaser-img", DVOJKA), source="dvojka"))
@@ -838,6 +840,14 @@ def localize_images(events: list[dict], workers: int = 10) -> None:
 # --------------------------------------------------------------------------- main
 
 
+def load_places() -> dict[str, list[float] | None]:
+    """Venue coordinates from geocode.py, for the map view. Empty until it has been run."""
+    try:
+        return json.loads((Path(__file__).parent / "venues.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Harvest Prague events into events.json.")
     ap.add_argument("--posters", action="store_true",
@@ -891,6 +901,8 @@ def main() -> None:
         "by_category": tally("category"),
         "venues": sorted({e["venue"] for e in events}),
         "categories": sorted({e["category"] for e in events}),
+        # {venue: [lat, lng]} for the map view; written by geocode.py, absent until it runs
+        "places": {k: v for k, v in load_places().items() if v},
         "events": events,
     }, ensure_ascii=False, indent=1), encoding="utf-8")
 

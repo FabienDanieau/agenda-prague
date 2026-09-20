@@ -36,11 +36,13 @@ jobs:
 
       # img/ and the two caches are NOT committed -- 9 MB of thumbnails re-committed daily
       # would bloat the repo forever. They live in the Actions cache instead, so a normal run
-      # re-downloads nothing and never re-spends Apify credit.
+      # re-downloads nothing and never re-spends Apify credit. venues.json is both committed
+      # (a good starting point) and cached, so a newly seen venue is geocoded once, not daily.
       - uses: actions/cache@v4
         with:
           path: |
             img
+            venues.json
             .image_cache.json
             .apify_cache.json
           key: agenda-${{ github.run_id }}
@@ -59,6 +61,14 @@ jobs:
           EXTRA=""
           [ "$(date -u +%u)" = "1" ] && EXTRA="--social"
           python3 harvest.py --posters $EXTRA
+
+      # Locates only venues the cache has not seen, at Nominatim's 1 req/s, then patches
+      # events.json's `places` in place so the harvest does not have to run a second time.
+      - name: locate new venues
+        run: python3 geocode.py
+
+      - name: check the map data
+        run: node maptest.js
 
       - name: refuse to publish an empty agenda
         run: |
