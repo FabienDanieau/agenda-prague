@@ -414,6 +414,39 @@ def from_crossclub(client: httpx.Client, today: date) -> list[dict]:
     return out
 
 
+# --------------------------------------------------------------------------- HW Lab
+
+
+HWLAB = "https://hwlab.praha.eu/akce-v-hw-labu"
+# "23.09 / 16:30" -- no trailing dot and no year, so it cannot go to dates.DOTTED as-is.
+# Loosening that pattern globally would make it match version numbers and measurements.
+HWLAB_WHEN = re.compile(r"(\d{1,2})\.(\d{1,2})(?:\s*/\s*(\d{1,2}:\d{2}))?")
+
+
+def from_hwlab(client: httpx.Client, today: date) -> list[dict]:
+    """Prague's city-run hardware lab (Webflow). Sections label the audience: schools vs public."""
+    soup = soup_of(client, HWLAB)
+    out = []
+    for card in soup.select(".collection-item-2"):
+        title = text_of(card, ".akce_heading")
+        m = HWLAB_WHEN.search(text_of(card, ".text-block-12"))
+        if not (title and m):
+            continue
+        day, month, clock = m.groups()
+        try:
+            p = dates.parse(f"{day}. {month}. {clock or ''}".strip(), today)
+        except dates.DateError:
+            continue
+        if not dates.plausible(p.start, today):
+            continue
+        link = card.select_one("a[href]")
+        out.append(event(
+            title, p.start, "HW Lab", category="science", start_time=p.start_time,
+            url=urljoin(HWLAB, link["href"]) if link else HWLAB,
+            image=img_of(card, "img", HWLAB), source="hwlab"))
+    return out
+
+
 # --------------------------------------------------------------------------- czech AI
 
 
@@ -1090,7 +1123,7 @@ def main() -> None:
                ("nocvedy", from_nocvedy), ("praguecc", from_praguecc),
                ("o2arena", from_o2arena), ("dox", from_dox),
                ("praha.eu", from_praha_eu), ("expats", from_expats),
-               ("cnaip", from_cnaip), ("sasazu", from_sasazu), ("rfpconcerts", from_rfpconcerts), ("praguerocks", from_praguerocks)]
+               ("hwlab", from_hwlab), ("cnaip", from_cnaip), ("sasazu", from_sasazu), ("rfpconcerts", from_rfpconcerts), ("praguerocks", from_praguerocks)]
     # Facebook costs Apify credit per event, so it rides along with --social
     if args.social:
         sources.insert(0, ("facebook", from_facebook))
