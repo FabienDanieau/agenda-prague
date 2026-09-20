@@ -23,7 +23,10 @@
   50.0754,
   14.43698
  ],
- "Bazilika sv. Petra a Pavla na Vyšehradě": null,
+ "Bazilika sv. Petra a Pavla na Vyšehradě": [
+  50.06442,
+  14.41788
+ ],
  "Bike Jesus": [
   50.09522,
   14.43635
@@ -78,10 +81,6 @@
   50.07639,
   14.44343
  ],
- "Elementary school and kindergarten Jiráskova, Kladno": [
-  50.1666,
-  14.0977
- ],
  "Eternia Smíchov": [
   50.0703,
   14.4088
@@ -94,13 +93,9 @@
   50.1277,
   14.3783
  ],
- "Faculty of Biomedical Engineering ": [
-  50.1356,
-  14.1042
- ],
  "Faculty of Civil Engineering": [
-  50.10411,
-  14.38815
+  50.1042,
+  14.3887
  ],
  "Faculty of Economics and Management": [
   50.131,
@@ -123,8 +118,8 @@
   14.3697
  ],
  "Faculty of Information Technology": [
-  50.10501,
-  14.38952
+  50.105,
+  14.3894
  ],
  "Faculty of Mechanical Engineering ": [
   50.1032,
@@ -159,15 +154,10 @@
   50.07539,
   14.41413
  ],
- "Geodetic Observatory Pecný": [
-  49.9137,
-  14.7856
+ "Havlíčkovy sady Náměstí Míru": [
+  50.06892,
+  14.44762
  ],
- "Gymnázium Václava Beneše Třebízského Slaný": [
-  50.2334,
-  14.0845
- ],
- "Havlíčkovy sady Náměstí Míru": null,
  "Heyrovsky Institute of the CAS": [
   50.1233,
   14.4653
@@ -204,10 +194,6 @@
   50.07897,
   14.42492
  ],
- "Kino Aero": [
-  50.09042,
-  14.47181
- ],
  "Kino MAT": [
   50.07775,
   14.4193
@@ -217,14 +203,13 @@
   50.07609,
   14.43881
  ],
- "Křižíkův Pavilon B": null,
+ "Křižíkův Pavilon B": [
+  50.10914,
+  14.42642
+ ],
  "Lucerna Music Bar": [
   50.0817,
   14.4249
- ],
- "Maple Building": [
-  49.9746,
-  14.536
  ],
  "Meet Factory": [
   50.0606,
@@ -250,12 +235,18 @@
   50.07816,
   14.42127
  ],
- "Nová Spirála": null,
+ "Nová Spirála": [
+  50.10837,
+  14.42992
+ ],
  "Náplavka": [
   50.07161,
   14.41429
  ],
- "Národní kulturní památka Vyšehrad": null,
+ "Národní kulturní památka Vyšehrad": [
+  50.06421,
+  14.41945
+ ],
  "O2 arena": [
   50.1039,
   14.493
@@ -296,7 +287,6 @@
   50.09923,
   14.44509
  ],
- "Subzero": null,
  "The Academy of Sciences campus in Spořilov": [
   50.0408,
   14.4769
@@ -313,10 +303,6 @@
   50.0899,
   14.4163
  ],
- "University Centre for Energy Efficient Buildings": [
-  50.1566,
-  14.1696
- ],
  "Vratislavova 57/1, 128 00 Praha 2-Vyšehrad, Česko": [
   50.06722,
   14.41737
@@ -324,10 +310,6 @@
  "Výstaviště Holešovice": [
   50.10914,
   14.42642
- ],
- "ZŠ, MŠ a ZUŠ Vinařice, okres Kladno": [
-  50.1766,
-  14.0888
  ],
  "etc. galerie": [
   50.06717,

@@ -98,6 +98,9 @@ VENUE_ALIAS = {
     "palac akropolis": "Palác Akropolis",
     "o2 universum": "O2 universum",
     "klub 007 strahov": "007 Strahov",
+    # Subzero is a room inside Eternia Smíchov, which the venue's own feed reports as a room
+    "subzero": "Eternia Smíchov",
+    "sasazu": "SaSaZu",
 }
 
 
@@ -343,6 +346,37 @@ def from_crossclub(client: httpx.Client, today: date) -> list[dict]:
             info=clip(info),
             image=img_of(node, ".photo153 img", CROSSCLUB),
             source="crossclub"))
+    return out
+
+
+# --------------------------------------------------------------------------- sasazu
+
+
+SASAZU = "https://www.sasazu-club.com/kalendar"
+# The visible rows show only a day number and weekday ("24 THU") under a month heading, but
+# the Next.js payload carries whole ISO dates. Read that instead of reassembling the columns.
+SASAZU_ENTRY = re.compile(
+    r'"id\\?":\\?"([0-9a-f-]{36})\\?","?\\?"?date\\?":\\?"(\d{4}-\d{2}-\d{2})\\?",\\?"?title\\?":\\?"((?:[^"\\]|\\.)*?)\\?"')
+
+
+def from_sasazu(client: httpx.Client, today: date) -> list[dict]:
+    r = client.get(SASAZU, headers={"User-Agent": BROWSER_UA})
+    r.raise_for_status()
+    out, seen = [], set()
+    for uuid, iso, raw_title in SASAZU_ENTRY.findall(r.text):
+        if uuid in seen:
+            continue
+        seen.add(uuid)
+        try:
+            day = date.fromisoformat(iso)
+            title = json.loads(f'"{raw_title}"').strip()
+        except ValueError:
+            continue
+        if not title or not dates.plausible(day, today):
+            continue
+        out.append(event(
+            title, day, "SaSaZu", category="music",
+            url=f"https://www.sasazu-club.com/akce/{uuid}", source="sasazu"))
     return out
 
 
@@ -947,7 +981,7 @@ def main() -> None:
                ("nocvedy", from_nocvedy), ("praguecc", from_praguecc),
                ("o2arena", from_o2arena), ("dox", from_dox),
                ("praha.eu", from_praha_eu), ("expats", from_expats),
-               ("rfpconcerts", from_rfpconcerts), ("praguerocks", from_praguerocks)]
+               ("sasazu", from_sasazu), ("rfpconcerts", from_rfpconcerts), ("praguerocks", from_praguerocks)]
     # Facebook costs Apify credit per event, so it rides along with --social
     if args.social:
         sources.insert(0, ("facebook", from_facebook))

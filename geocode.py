@@ -31,6 +31,7 @@ NOMINATIM = "https://nominatim.openstreetmap.org/search"
 UA = "agenda-prague/0.1 (https://github.com/FabienDanieau/agenda-prague)"
 NOCVEDY = "https://www.nocvedy.cz"
 NV_TOPICS = (20, 21, 22, 23)
+NV_PRAGUE = {"prague", "praha"}
 
 # Aggregator bylines, not places -- geocoding them would drop a pin on nothing.
 NOT_A_PLACE = {"expats.cz", "Praha.eu", "Noc vědců", "Mountains on Stage", "Praha 2", "?"}
@@ -59,6 +60,13 @@ MANUAL = {
     "Futurum": (50.0687, 14.4046),
     "Chapeau Rouge": (50.0872, 14.4207),
     "DOX": (50.1010, 14.4453),
+    # Verified against Nominatim's display_name, not typed from memory. The last two are halls
+    # inside Výstaviště Praha, so the grounds are an honest pin for them.
+    "Bazilika sv. Petra a Pavla na Vyšehradě": (50.06442, 14.41788),
+    "Národní kulturní památka Vyšehrad": (50.06421, 14.41945),
+    "Havlíčkovy sady Náměstí Míru": (50.06892, 14.44762),
+    "Nová Spirála": (50.10837, 14.42992),
+    "Křižíkův Pavilon B": (50.10914, 14.42642),
 }
 
 PRAGUE = (50.0755, 14.4378)
@@ -121,6 +129,11 @@ def nocvedy_places(client: httpx.Client) -> dict[str, tuple[float, float]]:
             r = client.get(f"{NOCVEDY}/api/events", params={"topics": topic}, headers=headers)
             r.raise_for_status()
             for it in r.json().get("data", {}).get("events", []):
+                # Only Prague places: "Faculty of Information Technology" is a CTU building
+                # here and a BUT building in Brno, and taking whichever came first pinned the
+                # Prague events to Brno -- where the in_prague check then dropped them.
+                if (it.get("cityName") or "").strip().lower() not in NV_PRAGUE:
+                    continue
                 if it.get("placeTitle") and it.get("placeUrl"):
                     urls.setdefault(it["placeTitle"], it["placeUrl"])
     except (httpx.HTTPError, ValueError) as exc:
@@ -130,15 +143,32 @@ def nocvedy_places(client: httpx.Client) -> dict[str, tuple[float, float]]:
     out: dict[str, tuple[float, float]] = {}
     for title, path in urls.items():
         try:
-            html = client.get(f"{NOCVEDY}{path}").text
+            html = client.get(f"{NOCVEDY}{path}").text.replace("&quot;", '"')
         except httpx.HTTPError:
             continue
-        for found_title, _, lat, lon in PLACE_JSON.findall(html.replace("&quot;", '"')):
-            if found_title == title and in_prague(float(lat), float(lon)):
-                out[title] = (float(lat), float(lon))
-                break
+        points = [(t, float(la), float(lo)) for t, _, la, lo in PLACE_JSON.findall(html)]
+        # prefer the entry whose title matches, but a place page is about one place, so any
+        # Prague point on it beats falling through to a geocoder guess
+        exact = [(la, lo) for t, la, lo in points if t == title and in_prague(la, lo)]
+        any_hit = [(la, lo) for _, la, lo in points if in_prague(la, lo)]
+        if chosen := (exact or any_hit):
+            out[title] = (round(chosen[0][0], 5), round(chosen[0][1], 5))
     print(f"  nocvedy: {len(out)}/{len(urls)} places with published coordinates")
     return out
+
+
+def relates_to(name: str, display_name: str) -> bool:
+    """Does the hit actually name this venue, or did Nominatim latch onto a stray number?
+
+    "Fuchs 2 Praha" returns a house number at Za Zelenou liškou with no "Fuchs" in it, and
+    "Klub Varšava" returns a bookshop. Both sit inside Prague, so the bounds check passes them
+    and the map gets a confidently wrong pin. Require a real word of the venue to come back.
+    """
+    words = {w for w in re.split(r"[^\w]+", name.lower()) if len(w) >= 4}
+    if not words:  # nothing distinctive to check against; take the hit
+        return True
+    got = display_name.lower()
+    return any(w in got for w in words)
 
 
 def nominatim(client: httpx.Client, name: str) -> tuple[float, float] | None:
@@ -162,8 +192,11 @@ def nominatim(client: httpx.Client, name: str) -> tuple[float, float] | None:
         except (httpx.HTTPError, ValueError):
             hits = []
         time.sleep(1.1)  # Nominatim's published limit is 1 req/s; stay under it
-        if hits and in_prague(float(hits[0]["lat"]), float(hits[0]["lon"])):
-            return round(float(hits[0]["lat"]), 5), round(float(hits[0]["lon"]), 5)
+        if not hits:
+            continue
+        lat, lon = float(hits[0]["lat"]), float(hits[0]["lon"])
+        if in_prague(lat, lon) and relates_to(name, hits[0].get("display_name", "")):
+            return round(lat, 5), round(lon, 5)
     return None
 
 
